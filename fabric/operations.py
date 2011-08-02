@@ -302,7 +302,7 @@ def prompt(text, key=None, default='', validate=None):
 
 
 @needs_host
-def put(local_path=None, remote_path=None, use_sudo=False,
+def put(local_path=None, remote_path=None, use_sudo=False, sudo_user=None,
     mirror_local_mode=False, mode=None):
     """
     Upload one or more files to a remote host.
@@ -344,6 +344,14 @@ def put(local_path=None, remote_path=None, use_sudo=False,
     ``use_sudo=True`` to work around this. When set, this setting causes `put`
     to upload the local files to a temporary location on the remote end, and
     then use `sudo` to move them to ``remote_path``.
+
+    If ``sudo_user`` is used in conjunction with ``use_sudo=True``, `put`
+    uploads the files to a temporary remote location owned by the ssh remote
+    user, then uses `sudo` with a ``user=sudo_user`` argument to copy the
+    temporary files to ``remote_path`` as ``sudo_user``. Finally, the temporary
+    files are deleted by the ssh remote user. Note that ``use_sudo=True``
+    without specifying a ``sudo_user`` will not change the owner of uploaded
+    files, while specifying a ``sudo_user`` will change the owner.
 
     In some use cases, it is desirable to force a newly uploaded file to match
     the mode of its local counterpart (such as when uploading executable
@@ -431,12 +439,12 @@ def put(local_path=None, remote_path=None, use_sudo=False,
         for lpath in names:
             try:
                 if local_is_path and os.path.isdir(lpath):
-                    p = ftp.put_dir(lpath, remote_path, use_sudo,
+                    p = ftp.put_dir(lpath, remote_path, use_sudo, sudo_user,
                         mirror_local_mode, mode)
                     remote_paths.extend(p)
                 else:
-                    p = ftp.put(lpath, remote_path, use_sudo, mirror_local_mode,
-                        mode, local_is_path)
+                    p = ftp.put(lpath, remote_path, use_sudo, sudo_user,
+                        mirror_local_mode, mode, local_is_path)
                     remote_paths.append(p)
             except Exception, e:
                 msg = "put() encountered an exception while uploading '%s'"

@@ -90,11 +90,11 @@ class SFTP(object):
         if not topdown:
             yield top, dirs, nondirs
 
-    def mkdir(self, path, use_sudo):
+    def mkdir(self, path, use_sudo, sudo_user=None):
         from fabric.api import sudo, hide
         if use_sudo:
             with hide('everything'):
-                sudo('mkdir %s' % path)
+                sudo('mkdir %s' % path, user=sudo_user)
         else:
             self.ftp.mkdir(path)
 
@@ -188,8 +188,8 @@ class SFTP(object):
                 result.append(self.get(rpath, lpath, True, rremote))
         return result
 
-    def put(self, local_path, remote_path, use_sudo, mirror_local_mode, mode,
-        local_is_path):
+    def put(self, local_path, remote_path, use_sudo, sudo_user,
+        mirror_local_mode, mode, local_is_path):
         from fabric.api import sudo, hide
         pre = self.ftp.getcwd()
         pre = pre if pre else ''
@@ -233,18 +233,31 @@ class SFTP(object):
             if lmode != rmode:
                 if use_sudo:
                     with hide('everything'):
-                        sudo('chmod %o \"%s\"' % (lmode, remote_path))
+                        sudo('chmod %o \"%s\"' % (lmode, remote_path),
+                             user=sudo_user)
                 else:
                     self.ftp.chmod(remote_path, lmode)
         if use_sudo:
             with hide('everything'):
-                sudo("mv \"%s\" \"%s\"" % (remote_path, target_path))
+                # if sudo_user is given, instead of 'mv', 'cp' as sudo_user,
+                # then run() 'rm' as ssh remote user.
+                if sudo_user:
+                    from fabric.context_managers import settings
+                    from fabric.api import run, abort
+                    with settings(warn_only=True):
+                        cp = sudo("cp \"%s\" \"%s\"" % (remote_path, target_path),
+                                  user=sudo_user)
+                    run("rm \"%s\"" % (remote_path))
+                    if cp.failed:
+                        abort("User \"%s\" either does not have read permission to the default upload location\nor does not have write permission to the requested remote location" % (sudo_user))
+                else:
+                    sudo("mv \"%s\" \"%s\"" % (remote_path, target_path))
             # Revert to original remote_path for return value's sake
             remote_path = target_path
         return remote_path
 
-    def put_dir(self, local_path, remote_path, use_sudo, mirror_local_mode,
-        mode):
+    def put_dir(self, local_path, remote_path, use_sudo, sudo_user,
+        mirror_local_mode, mode):
         if os.path.basename(local_path):
             strip = os.path.dirname(local_path)
         else:
@@ -268,7 +281,7 @@ class SFTP(object):
             for f in files:
                 local_path = os.path.join(context, f)
                 n = os.path.join(rcontext, f)
-                p = self.put(local_path, n, use_sudo, mirror_local_mode, mode,
-                    True)
+                p = self.put(local_path, n, use_sudo, sudo_user,
+                             mirror_local_mode, mode, True)
                 remote_paths.append(p)
         return remote_paths
